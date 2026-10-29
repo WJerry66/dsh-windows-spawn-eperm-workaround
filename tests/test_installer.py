@@ -7,6 +7,8 @@ import struct
 import subprocess
 import tempfile
 import unittest
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'scripts' / 'Manage-Workaround.ps1'
@@ -70,7 +72,14 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(installed.count(b'# BEGIN dsh-'), 1)
         loader = (self.profile / 'compat/dsh-windows-spawn-eperm-workaround/loader.mjs').read_text()
         self.assertIn('%20', loader)
-        self.assertIn(self.app.as_uri(), loader)
+        native_url = json.loads(loader.splitlines()[0].removeprefix('import NativeRuntime from ').removesuffix(';'))
+        self.assertEqual(urlsplit(native_url).scheme, 'file')
+        native_path = Path(url2pathname(urlsplit(native_url).path))
+        self.assertEqual(native_path.parts[-8:], ('resources', 'app.asar', 'dsh', 'node_modules',
+                                                '@deepseek-ai', 'dsh-subprocess-local', 'lib', 'index.js'))
+        # .NET expands 8.3 aliases (e.g. RUNNER~1) while tempfile may retain them.
+        # Compare the existing app directory by filesystem identity, not spelling.
+        self.assertTrue(native_path.parents[7].samefile(self.app))
         self.run_script('Check')
         self.run_script('Install')
         self.assertEqual(installed, self.config.read_bytes())
