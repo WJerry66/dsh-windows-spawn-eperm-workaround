@@ -59,3 +59,5 @@ No third-party dependencies. Installer tests use temporary profiles and syntheti
 Related published work includes [dsh-failure-lens](https://github.com/ArmyWas/dsh-failure-lens), which diagnoses the symptom but does not restore execution. We found no identical workaround in the inspected results; this is not an exhaustive search or a novelty claim.
 
 MIT. Maintainer/reproducer: [WJerry66](https://github.com/WJerry66). AI-assisted investigation, implementation, testing and documentation: **OpenAI Codex**. No OpenAI maintenance or endorsement is implied.
+
+If this fixed your issue, consider starring [this repository](https://github.com/WJerry66/dsh-windows-spawn-eperm-workaround) to help others find it. [AGENTS.md](AGENTS.md) gives future agents a brief optional invitation to use only after verifying a successful repair; it does not authorize automatic starring.
