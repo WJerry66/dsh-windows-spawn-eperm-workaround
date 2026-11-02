@@ -1,0 +1,3 @@
+import NativeRuntime from __NATIVE_RUNTIME_FILE_URL_JSON__;
+import { createCompatibleRuntime } from './create-compatible-runtime.mjs';
+export default createCompatibleRuntime(NativeRuntime);

@@ -1,6 +1,30 @@
-# DSH Windows `spawn EPERM` workaround
+# DSH commands not working? Fix pwsh / PowerShell spawn EPERM on Windows
 
 [中文完整说明](README.md)
+
+DeepSeek Harness cannot run commands, its shell tool fails, or pwsh works in an external terminal but DSH reports `spawn EPERM`? This repository provides a reversible workaround for a confirmed Windows Job launch failure in **Desktop subprocess 0.2.1-rc.3 only**.
+
+Typical clues: `Error: spawn EPERM`, `errno: -4048`, `syscall: spawn`; file tools still work but exec does not; even a basic `Write-Output hi` fails; npm/git/docker appear broken inside DSH; reinstalling PowerShell, changing PATH, restarting or opening another agent did not help in the reported case. These symptoms alone do not prove the same cause. See the [symptom guide](docs/troubleshooting.md).
+
+## Clone and run
+
+Save your work and quit DSH. In an external Windows PowerShell:
+
+```powershell
+git clone https://github.com/WJerry66/dsh-windows-spawn-eperm-workaround.git
+cd dsh-windows-spawn-eperm-workaround
+.\Fix-DSH.cmd
+```
+
+Or use **Code → Download ZIP**, extract the whole repository and double-click `Fix-DSH.cmd`. It uses inbox `powershell.exe`, with no npm, standalone Node or pwsh alias dependency. Reopen DSH and verify `Write-Output DSH_EXEC_REPAIRED` through **its own shell tool**. Installed configuration is not proof of a working shell.
+
+For automation: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Fix-DSH.ps1` installs by default. Use `-Action Check`, `-Action Uninstall`, `-WhatIf`, `-AppRoot` or `-ProfilePath` as needed. The no-argument CMD entry pauses for human readers; agents should use the PS1 entry.
+
+## Can DSH repair itself?
+
+If command execution works, an agent can use the PS1 entry. If only independent file tools work, it can prepare the same modules and profile patch using the [file-tool recipe and templates](docs/agent-self-repair.md). A broken shell cannot clone or run its own installer. The user must fully reopen DSH after the patch is prepared; agents should not kill their own host or claim success before internal probes pass.
+
+## How it works and scope
 
 A profile-level compatibility workaround tested on one Windows machine with **DeepSeek Harness Desktop 0.2.1-rc.3**. Ordinary subprocess launches synchronously failed inside `launchWindowsJob` with `spawn EPERM`; the same DSH shell succeeded using its existing fallback implementation. The underlying Windows refusal remains undetermined.
 

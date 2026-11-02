@@ -95,6 +95,55 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.config.read_bytes(), self.original.encode())
         self.assertFalse((self.profile / 'compat').exists())
 
+    def run_entry(self, entry, *extra, ok=True):
+        args = ['-AppRoot', str(self.app), '-ProfilePath', str(self.profile), *extra]
+        if entry.suffix == '.cmd':
+            # Match cmd.exe's outer-quote rules, including paths with spaces.
+            command = subprocess.list2cmdline([str(entry), *args])
+            invocation = f'"{os.environ["COMSPEC"]}" /d /s /c "{command}"'
+        else:
+            invocation = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(entry), *args]
+        result = subprocess.run(invocation, capture_output=True, timeout=30, cwd=self.base)
+        if ok:
+            self.assertEqual(result.returncode, 0, (result.stdout + result.stderr).decode(errors='replace'))
+        else:
+            self.assertNotEqual(result.returncode, 0)
+        return result
+
+    def test_root_entry_defaults_to_install_and_forwards_options(self):
+        entry = ROOT / 'Fix-DSH.ps1'
+        self.run_entry(entry, '-WhatIf')
+        self.assertEqual(self.config.read_bytes(), self.original.encode())
+        self.assertFalse((self.profile / 'compat').exists())
+        self.run_entry(entry)
+        self.assertIn(b'# BEGIN dsh-', self.config.read_bytes())
+        self.run_entry(entry, '-Action', 'Check')
+        self.run_entry(entry, '-Action', 'Uninstall')
+        self.assertEqual(self.config.read_bytes(), self.original.encode())
+
+    def test_cmd_entry_custom_paths_and_failure_exit_code(self):
+        entry = ROOT / 'Fix-DSH.cmd'
+        self.run_entry(entry)
+        self.assertIn(b'# BEGIN dsh-', self.config.read_bytes())
+        self.run_entry(entry, '-Action', 'Uninstall')
+        self.assertEqual(self.config.read_bytes(), self.original.encode())
+        make_asar(self.asar, version='99.0.0')
+        self.run_entry(entry, '-Action', 'Install', ok=False)
+        self.assertEqual(self.config.read_bytes(), self.original.encode())
+
+    def test_file_tool_templates_match_installer_output(self):
+        self.run_script('Install')
+        module_dir = self.profile / 'compat/dsh-windows-spawn-eperm-workaround'
+        loader = (module_dir / 'loader.mjs').read_text(encoding='utf-8')
+        native_json = loader.splitlines()[0].removeprefix('import NativeRuntime from ').removesuffix(';')
+        template = (ROOT / 'templates/loader.mjs.template').read_text(encoding='utf-8')
+        self.assertEqual(template.count('__NATIVE_RUNTIME_FILE_URL_JSON__'), 1)
+        self.assertEqual(loader, template.replace('__NATIVE_RUNTIME_FILE_URL_JSON__', native_json))
+        fragment = (ROOT / 'templates/cordis.patch.fragment.yml').read_text(encoding='utf-8')
+        self.assertEqual(self.config.read_bytes(), self.original.encode() + fragment.replace('\n', '\r\n').encode())
+        self.assertEqual((module_dir / 'create-compatible-runtime.mjs').read_bytes(),
+                         (ROOT / 'src/create-compatible-runtime.mjs').read_bytes())
+
     def test_version_and_api_mismatch_fail_before_mutation(self):
         make_asar(self.asar, version='99.0.0')
         self.run_script('Install', ok=False)

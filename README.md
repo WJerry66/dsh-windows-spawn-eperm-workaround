@@ -1,12 +1,49 @@
-# DSH Windows `spawn EPERM` workaround
+# DSH 无法执行命令 / pwsh 调用失败 / spawn EPERM 一键修复
 
-[English](README.en.md) · [故障分析](docs/incident.md) · [相关项目](docs/related-work.md) · [作者](AUTHORS.md)
+[English](README.en.md) · [常见症状与排错](docs/troubleshooting.md) · [让 DSH 自己准备修复](docs/agent-self-repair.md) · [故障记录](docs/incident.md) · [相关项目](docs/related-work.md) · [作者](AUTHORS.md)
 
-针对 **DeepSeek Harness Desktop 0.2.1-rc.3** 的一个本机实测兼容方案：普通命令在原生 Windows Job 启动路径中同步抛出 `spawn EPERM` 时，通过 profile 模块改用 DSH 已有的 Windows fallback，让命令执行恢复。
+**DeepSeek Harness（DSH）在 Windows 上执行不了命令，pwsh / PowerShell 调用失败，外部终端能跑但 DSH 报 `spawn EPERM`？** 这个仓库记录了一次实际修好的案例，并提供 clone 后一键运行、可撤销的兼容补丁。无需 npm，也不用单独装 Node。
 
 **状态：单台 Windows 机器实测有效，底层拒绝原因尚未确定。** 这不是所有 `EPERM` 的通用修复，也不是上游官方补丁。
 
+## 先看是不是你遇到的问题
+
+- DSH 命令执行失败、shell 工具不能用，连 `Write-Output hi` 都起不来。
+- 日志出现 `Error: spawn EPERM`、`errno: -4048`、`syscall: spawn`，或 agent 提到 `EXEC_BROKEN: spawn EPERM`。
+- cmd / 外部 PowerShell 能输出 `hi`，DSH 内的 `pwsh.exe` 调用却失败。
+- 能读写文件，不能启动进程；npm / git / docker 在 DSH 里也跟着不能用。
+- 安装 PowerShell 7、调整 PATH、重启、新会话或新 agent 后仍失败。
+
+这些是排查线索，不是同因保证。**本包只接受已验证的 Desktop subprocess `0.2.1-rc.3`**；失败位置是 DSH 的 `launchWindowsJob`。[更多症状、常见误判与安装报错](docs/troubleshooting.md)。
+
+## 三行开始：clone 后一键修复
+
+先保存工作、正常退出 DSH，在 **Windows 自己的 PowerShell** 中运行：
+
+```powershell
+git clone https://github.com/WJerry66/dsh-windows-spawn-eperm-workaround.git
+cd dsh-windows-spawn-eperm-workaround
+.\Fix-DSH.cmd
+```
+
+没有 Git：在本页 **Code → Download ZIP**，解压后双击 `Fix-DSH.cmd`。请下载整个仓库，不要只下载入口文件。一键入口用系统自带 `powershell.exe`，不依赖 `pwsh` 别名。
+
+成功写入后，**完整重新打开 DSH**，让它自己的 shell 执行 `Write-Output DSH_EXEC_REPAIRED`。看到输出才证明命令通道恢复；完整探针见下方。脚本不自动强杀或重启 DSH。
+
+只检查：`Fix-DSH.cmd -Action Check`；撤销：`Fix-DSH.cmd -Action Uninstall`；自定义目录：`Fix-DSH.cmd -AppRoot "D:\Apps\DeepSeek Harness"`。
+
+## DSH 能不能自己修自己？
+
+可以让它准备修复，但取决于它还有哪些工具可用：
+
+- **命令执行还能用**：agent clone 后运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Fix-DSH.ps1`，默认就是安装；支持 `-WhatIf`。
+- **命令执行全坏，独立文件工具仍能用**：用文件工具备份配置、写模块和追加模板，不再依赖坏掉的 shell。见[可直接发给 agent 的修复说明](docs/agent-self-repair.md)。
+
+当前 DSH 不能执行命令时，不要让它继续用同一 shell 去 clone、跑 npm 或安装补丁。可以由你在外部运行一键入口，或让它走文件路线；最后完整重启，再在 DSH 内验证。
+
 ## 适用范围和机制
+
+普通命令在原生 Windows Job 启动路径中同步抛出 `spawn EPERM` 时，补丁通过 profile 模块改用 DSH 已有的 Windows fallback，让命令执行恢复。
 
 已验证的故障栈位于 `@deepseek-ai/dsh-subprocess-local/lib/index.js` 的 `launchWindowsJob`，错误为 `EPERM` / `errno -4048` / `syscall spawn`。同一 DSH 后端、同一 shell 经内置 fallback 成功运行；PowerShell 路径确为真实安装路径，非 WindowsApps 别名。
 
@@ -14,9 +51,9 @@
 
 **行为差异：** 普通子进程使用内置 fallback 的进程树管理方式，替代原生 Job 管理。脱离父子关系的后代进程可能无法获得相同的退出清理保证。安装后需要完整退出并重新打开 DSH；升级前建议撤销并重新验证。
 
-## 安装（无需 npm、管理员权限或单独安装 Node）
+## 详细安装与检查（可选）
 
-先正常退出 DSH，再在解压目录打开 PowerShell。支持 Windows PowerShell 5.1 / PowerShell 7。
+上方一键入口调用的就是下面的安装器。先正常退出 DSH，再在解压目录打开 PowerShell。支持 Windows PowerShell 5.1 / PowerShell 7，不需要管理员权限。
 
 ```powershell
 # 静态检查版本和包结构，不写配置

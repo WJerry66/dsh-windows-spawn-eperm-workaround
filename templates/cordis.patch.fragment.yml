@@ -1,0 +1,7 @@
+# BEGIN dsh-windows-spawn-eperm-workaround v1
+- id: subprocess
+  disabled: true
+- insert:
+    - id: subprocess-windows-compat
+      name: './compat/dsh-windows-spawn-eperm-workaround/loader.mjs'
+# END dsh-windows-spawn-eperm-workaround v1
